@@ -1,0 +1,16 @@
+term,genes,adjusted_pvalue
+DNA replication-independent nucleosome organization,SUPT16H;H3-3A,0.015812
+actin filament capping (GO:0051693),SVIL;ADD1,0.015812
+cellular response to catecholamine stimulus,GNB1;MAPK1,0.016585
+positive regulation of DNA-templated transcription,SUPT16H;SUPT5H,0.016585
+regulation of DNA-templated transcription,SUPT16H;SUPT5H,0.017383
+nucleosome organization (GO:0034728),SUPT16H;H3-3A,0.068715
+postsynaptic endocytosis (GO:0140210),DNM2,0.068715
+caveolin-mediated endocytosis (GO:0072583),MAPK1,0.068715
+positive regulation of macrophage proliferation,MAPK1,0.068715
+glycosphingolipid metabolic process,ST6GALNAC6,0.068715
+cellular response to monoamine stimulus,GNB1,0.068715
+synaptic vesicle budding from presynaptic membrane,DNM2,0.068715
+cellular response to metal ion,MAPK1;ADD1,0.068715
+negative regulation of mRNA polyadenylation,SUPT5H,0.068715
+dynamin family protein polymerization,DNM2,0.068715
