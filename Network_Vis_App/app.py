@@ -166,7 +166,19 @@ def subgraph_filter(
 ) -> nx.Graph:
     """Return a filtered subgraph based on UI controls."""
     # Edge weight filter
-    edges_keep = [(u, v) for u, v, ed in g.edges(data=True) if float(ed.get("weight", 1.0)) >= min_weight]
+
+def _edge_w(ed: dict) -> float:
+    for k in ("weight_plot", "weight_raw", "weight"):
+        if k in ed and ed[k] is not None:
+            try:
+                return float(ed[k])
+            except Exception:
+                pass
+    return 1.0
+
+
+edges_keep = [(u, v) for u, v, ed in g.edges(data=True) if _edge_w(ed) >= min_weight]
+    
     sg = g.edge_subgraph(edges_keep).copy()
 
     # Degree filter
@@ -1148,3 +1160,4 @@ def download_edges(n, store):
 
 if __name__ == "__main__":
     app.run_server(host="0.0.0.0", port=8050, debug=True)
+
