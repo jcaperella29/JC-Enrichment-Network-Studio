@@ -1,5 +1,3 @@
-
-import base64
 import io
 import math
 from typing import Dict, Tuple
@@ -25,6 +23,7 @@ REQUIRED_RAW_COLS_NOTE = (
 import plotly.express as px
 import math
 
+
 def edge_weight_from_adj_p(p: float) -> float:
     """Convert adjusted p-value to a 'bigger = more significant' weight."""
     if p is None:
@@ -44,10 +43,10 @@ def minmax_scale(x: float, xmin: float, xmax: float, out_min: float, out_max: fl
         return (out_min + out_max) / 2.0
     return out_min + (x - xmin) * (out_max - out_min) / (xmax - xmin)
 
+
 def term_color_map(terms):
     palette = px.colors.qualitative.Set3 + px.colors.qualitative.Dark24
     return {t: palette[i % len(palette)] for i, t in enumerate(sorted(terms))}
-
 
 
 def parse_upload(contents: str) -> pd.DataFrame:
@@ -55,6 +54,7 @@ def parse_upload(contents: str) -> pd.DataFrame:
     content_type, content_string = contents.split(",", 1)
     decoded = base64.b64decode(content_string)
     return pd.read_csv(io.StringIO(decoded.decode("utf-8")))
+
 
 import math
 import pandas as pd
@@ -86,7 +86,7 @@ def build_bipartite_graph(
     # Clean strings
     tmp[item_col] = tmp[item_col].astype(str).str.strip()
     tmp[group_col] = tmp[group_col].astype(str).str.strip()
-  
+
     # Drop junk
     tmp = tmp.dropna(subset=[item_col, group_col])
     tmp = tmp[(tmp[item_col] != "") & (tmp[group_col] != "")]
@@ -123,9 +123,8 @@ def build_bipartite_graph(
                 weight_plot=1.0
             )
 
-
-
     return g
+
 
 def layout_bipartite_two_column(g: nx.Graph) -> Dict[str, Tuple[float, float]]:
     """
@@ -134,10 +133,10 @@ def layout_bipartite_two_column(g: nx.Graph) -> Dict[str, Tuple[float, float]]:
     - y sorted by degree so hubs sit near center
     """
     groups = [n for n, d in g.nodes(data=True) if d.get("node_type") == "group"]
-    items  = [n for n, d in g.nodes(data=True) if d.get("node_type") == "item"]
+    items = [n for n, d in g.nodes(data=True) if d.get("node_type") == "item"]
 
     groups_sorted = sorted(groups, key=lambda n: g.degree(n), reverse=True)
-    items_sorted  = sorted(items,  key=lambda n: g.degree(n), reverse=True)
+    items_sorted = sorted(items, key=lambda n: g.degree(n), reverse=True)
 
     def y_positions(nodes_sorted):
         if len(nodes_sorted) == 1:
@@ -156,6 +155,7 @@ def layout_bipartite_two_column(g: nx.Graph) -> Dict[str, Tuple[float, float]]:
 
     return pos
 
+
 def subgraph_filter(
     g: nx.Graph,
     search: str,
@@ -165,20 +165,19 @@ def subgraph_filter(
     largest_component_only: bool,
 ) -> nx.Graph:
     """Return a filtered subgraph based on UI controls."""
+
+    # ---- Helper: choose the right edge weight key (prefer weight_plot) ----
+    def _edge_w(ed: dict) -> float:
+        for k in ("weight_plot", "weight_raw", "weight"):
+            if k in ed and ed[k] is not None:
+                try:
+                    return float(ed[k])
+                except Exception:
+                    pass
+        return 1.0
+
     # Edge weight filter
-
-def _edge_w(ed: dict) -> float:
-    for k in ("weight_plot", "weight_raw", "weight"):
-        if k in ed and ed[k] is not None:
-            try:
-                return float(ed[k])
-            except Exception:
-                pass
-    return 1.0
-
-
-edges_keep = [(u, v) for u, v, ed in g.edges(data=True) if _edge_w(ed) >= min_weight]
-    
+    edges_keep = [(u, v) for u, v, ed in g.edges(data=True) if _edge_w(ed) >= min_weight]
     sg = g.edge_subgraph(edges_keep).copy()
 
     # Degree filter
@@ -220,6 +219,7 @@ edges_keep = [(u, v) for u, v, ed in g.edges(data=True) if _edge_w(ed) >= min_we
 
     return sg
 
+
 import math
 from typing import Dict, Tuple
 import networkx as nx
@@ -229,6 +229,7 @@ import math
 from typing import Dict, Tuple
 import networkx as nx
 import plotly.graph_objects as go
+
 
 def make_plotly_network(
     g: nx.Graph,
@@ -448,7 +449,6 @@ def make_plotly_network(
     return fig
 
 
-
 def graph_stats(g: nx.Graph) -> Dict[str, object]:
     if g.number_of_nodes() == 0:
         return dict(
@@ -547,6 +547,7 @@ def graph_stats(g: nx.Graph) -> Dict[str, object]:
         weight_summary=weight_summary,
         top_weighted_edges=top_weighted_edges,
     )
+
 
 # ----------------------------
 # Dash App
@@ -713,6 +714,7 @@ main_panel = html.Div(
     ],
 )
 
+
 # ----------------------------
 # Layout
 # ----------------------------
@@ -729,273 +731,274 @@ app.layout = html.Div(
         # ==========================
         # SIDEBAR (uploads + filters)
         # ==========================
-html.Div(
-    style={
-        "width": "360px",
-        "background": "#EEF2FF",  # was: ""#EEF2FF"  (invalid)
-        "borderRadius": "14px",
-        "padding": "14px",
-        "boxShadow": "0 4px 10px rgba(0,0,0,0.12)",
-        "height": "calc(100vh - 32px)",
-        "overflow": "auto",
-    },
-    children=[
-        html.H3(
-            "JC Enrichment Network Studio",
-            style={"marginBottom": "6px", "color": "#003566"},
-        ),
-
         html.Div(
-            REQUIRED_RAW_COLS_NOTE,
             style={
-                "fontSize": "0.9rem",
-                "color": "#4b5563",
-                "marginBottom": "12px",
-            },
-        ),
-
-        # -------- Raw input --------
-        html.H4(
-            "Raw input",
-            style={"marginTop": "10px", "color": "#003566"},
-        ),
-
-        dcc.Upload(
-            id="upload-raw",
-            children=html.Div(
-                ["Drag & drop or ", html.B("browse"), " (CSV)"]
-            ),
-            style={
-                "width": "100%",
+                "width": "360px",
+                "background": "#EEF2FF",  # was: ""#EEF2FF"  (invalid)
+                "borderRadius": "14px",
                 "padding": "14px",
-                "borderWidth": "2px",
-                "borderStyle": "dashed",
-                "borderRadius": "12px",
-                "textAlign": "center",
-                "cursor": "pointer",
-                "color": "#111827",
-                "background": "#f8fafc",
+                "boxShadow": "0 4px 10px rgba(0,0,0,0.12)",
+                "height": "calc(100vh - 32px)",
+                "overflow": "auto",
             },
-            multiple=False,
-        ),
-
-        html.Div(id="raw-upload-status", style={"marginTop": "8px", "fontSize": "0.9rem"}),
-
-        html.Div(
-            style={"marginTop": "12px"},
             children=[
-                html.Label("Item column (genes)"),
-                dcc.Dropdown(id="item-col", placeholder="Select…"),
+                html.H3(
+                    "JC Enrichment Network Studio",
+                    style={"marginBottom": "6px", "color": "#003566"},
+                ),
 
-                html.Label("Group column (pathways/terms)", style={"marginTop": "10px"}),
-                dcc.Dropdown(id="group-col", placeholder="Select…"),
+                html.Div(
+                    REQUIRED_RAW_COLS_NOTE,
+                    style={
+                        "fontSize": "0.9rem",
+                        "color": "#4b5563",
+                        "marginBottom": "12px",
+                    },
+                ),
 
-                html.Label("Weight/score column (optional)", style={"marginTop": "10px"}),
-                dcc.Dropdown(id="weight-col", placeholder="None", clearable=True),
+                # -------- Raw input --------
+                html.H4(
+                    "Raw input",
+                    style={"marginTop": "10px", "color": "#003566"},
+                ),
+
+                dcc.Upload(
+                    id="upload-raw",
+                    children=html.Div(
+                        ["Drag & drop or ", html.B("browse"), " (CSV)"]
+                    ),
+                    style={
+                        "width": "100%",
+                        "padding": "14px",
+                        "borderWidth": "2px",
+                        "borderStyle": "dashed",
+                        "borderRadius": "12px",
+                        "textAlign": "center",
+                        "cursor": "pointer",
+                        "color": "#111827",
+                        "background": "#f8fafc",
+                    },
+                    multiple=False,
+                ),
+
+                html.Div(id="raw-upload-status", style={"marginTop": "8px", "fontSize": "0.9rem"}),
+
+                html.Div(
+                    style={"marginTop": "12px"},
+                    children=[
+                        html.Label("Item column (genes)"),
+                        dcc.Dropdown(id="item-col", placeholder="Select…"),
+
+                        html.Label("Group column (pathways/terms)", style={"marginTop": "10px"}),
+                        dcc.Dropdown(id="group-col", placeholder="Select…"),
+
+                        html.Label("Weight/score column (optional)", style={"marginTop": "10px"}),
+                        dcc.Dropdown(id="weight-col", placeholder="None", clearable=True),
+                    ],
+                ),
+
+                html.Button(
+                    "Preprocess / Build graph",
+                    id="btn-build",
+                    n_clicks=0,
+                    style={
+                        "marginTop": "12px",
+                        "width": "100%",
+                        "padding": "10px",
+                        "borderRadius": "10px",
+                        "border": "none",
+                        "background": "#0077b6",
+                        "color": "white",
+                        "fontWeight": "800",
+                        "cursor": "pointer",
+                    },
+                ),
+
+                # -------- Sidebar controls (Plot controls + Filters) --------
+                html.Hr(style={"margin": "14px 0"}),
+
+                html.H4("Plot controls", style={"color": "#003566"}),
+
+                html.Label("Search gene/pathway"),
+                dcc.Input(
+                    id="search",
+                    placeholder="Type to filter…",
+                    debounce=True,
+                    style={
+                        "padding": "10px 12px",
+                        "borderRadius": "10px",
+                        "border": "1px solid #d1d5db",
+                        "width": "100%",
+                        "marginTop": "6px",
+                    },
+                ),
+
+                html.Label("Layout", style={"marginTop": "10px"}),
+                dcc.Dropdown(
+                    id="layout-mode",
+                    options=[
+                        {"label": "Bipartite (two columns)", "value": "bipartite"},
+                        {"label": "Force-directed", "value": "force"},
+                    ],
+                    value="bipartite",
+                    clearable=False,
+                ),
+
+                dcc.Checklist(
+                    id="edge-style",
+                    options=[{"label": " Thickness by weight", "value": "thick"}],
+                    value=["thick"],
+                    style={"marginTop": "10px"},
+                ),
+
+                html.Hr(style={"margin": "14px 0"}),
+
+                html.H4("Filters", style={"color": "#003566"}),
+
+                html.Label("Minimum node degree"),
+                dcc.Slider(
+                    id="min-degree",
+                    min=0, max=20, step=1, value=0,
+                    marks=None,
+                    tooltip={"placement": "right"},
+                    updatemode="mouseup",
+                ),
+
+                html.Label("Edge width range", style={"marginTop": "10px"}),
+                dcc.RangeSlider(
+                    id="edge-width-range",
+                    min=1,
+                    max=10,
+                    step=0.5,
+                    value=[1.5, 6.0],
+                    marks=None,
+                    tooltip={"placement": "right"},
+                    updatemode="mouseup",
+                ),
+
+                html.Label("Weight range for scaling (−log10 adj p)", style={"marginTop": "10px"}),
+                dcc.RangeSlider(
+                    id="edge-weight-range",
+                    min=0,
+                    max=20,
+                    step=0.5,
+                    value=[0, 10],
+                    marks=None,
+                    tooltip={"placement": "right"},
+                    updatemode="mouseup",
+                ),
+
+                html.Label("Minimum edge weight", style={"marginTop": "10px"}),
+                dcc.Slider(
+                    id="min-weight",
+                    min=0, max=10, step=0.5, value=0,
+                    marks=None,
+                    tooltip={"placement": "right"},
+                    updatemode="mouseup",
+                ),
+
+                html.Label("Maximum number of groups", style={"marginTop": "10px"}),
+                dcc.Slider(
+                    id="max-groups",
+                    min=5, max=200, step=5, value=50,
+                    marks=None,
+                    tooltip={"placement": "right"},
+                    updatemode="mouseup",
+                ),
+
+                # -------- Advanced uploads (optional) --------
+                html.Hr(style={"margin": "14px 0"}),
+
+                html.H4("Advanced (optional)", style={"color": "#003566"}),
+                dcc.Checklist(
+                    id="use-prebuilt",
+                    options=[{"label": " Use prebuilt nodes/edges instead", "value": "yes"}],
+                    value=[],
+                    style={"marginBottom": "8px"},
+                ),
+
+                dcc.Upload(
+                    id="upload-nodes",
+                    children=html.Div(["Upload nodes.csv"]),
+                    style={
+                        "width": "100%",
+                        "padding": "10px",
+                        "borderWidth": "1px",
+                        "borderStyle": "dashed",
+                        "borderRadius": "10px",
+                        "textAlign": "center",
+                        "background": "#f8fafc",
+                    },
+                    multiple=False,
+                ),
+
+                dcc.Upload(
+                    id="upload-edges",
+                    children=html.Div(["Upload edges.csv"]),
+                    style={
+                        "width": "100%",
+                        "padding": "10px",
+                        "borderWidth": "1px",
+                        "borderStyle": "dashed",
+                        "borderRadius": "10px",
+                        "textAlign": "center",
+                        "background": "#f8fafc",
+                        "marginTop": "8px",
+                    },
+                    multiple=False,
+                ),
+
+                html.Div(id="prebuilt-status", style={"marginTop": "8px", "fontSize": "0.9rem"}),
+
+                # -------- Export --------
+                html.Hr(style={"margin": "14px 0"}),
+
+                html.H4("Export", style={"color": "#003566"}),
+                html.Div("Downloads appear after graph build.", style={"fontSize": "0.9rem", "color": "#4b5563"}),
+
+                dcc.Download(id="dl-nodes"),
+                dcc.Download(id="dl-edges"),
+
+                html.Button(
+                    "Download nodes.csv",
+                    id="btn-dl-nodes",
+                    n_clicks=0,
+                    style={
+                        "marginTop": "10px",
+                        "width": "100%",
+                        "padding": "10px",
+                        "borderRadius": "10px",
+                        "border": "1px solid #0077b6",
+                        "background": "white",
+                        "color": "#0077b6",
+                        "fontWeight": "800",
+                        "cursor": "pointer",
+                    },
+                ),
+
+                html.Button(
+                    "Download edges.csv",
+                    id="btn-dl-edges",
+                    n_clicks=0,
+                    style={
+                        "marginTop": "8px",
+                        "width": "100%",
+                        "padding": "10px",
+                        "borderRadius": "10px",
+                        "border": "1px solid #0077b6",
+                        "background": "white",
+                        "color": "#0077b6",
+                        "fontWeight": "800",
+                        "cursor": "pointer",
+                    },
+                ),
             ],
         ),
-
-        html.Button(
-            "Preprocess / Build graph",
-            id="btn-build",
-            n_clicks=0,
-            style={
-                "marginTop": "12px",
-                "width": "100%",
-                "padding": "10px",
-                "borderRadius": "10px",
-                "border": "none",
-                "background": "#0077b6",
-                "color": "white",
-                "fontWeight": "800",
-                "cursor": "pointer",
-            },
-        ),
-
-        # -------- Sidebar controls (Plot controls + Filters) --------
-        html.Hr(style={"margin": "14px 0"}),
-
-        html.H4("Plot controls", style={"color": "#003566"}),
-
-        html.Label("Search gene/pathway"),
-        dcc.Input(
-            id="search",
-            placeholder="Type to filter…",
-            debounce=True,
-            style={
-                "padding": "10px 12px",
-                "borderRadius": "10px",
-                "border": "1px solid #d1d5db",
-                "width": "100%",
-                "marginTop": "6px",
-            },
-        ),
-
-        html.Label("Layout", style={"marginTop": "10px"}),
-        dcc.Dropdown(
-            id="layout-mode",
-            options=[
-                {"label": "Bipartite (two columns)", "value": "bipartite"},
-                {"label": "Force-directed", "value": "force"},
-            ],
-            value="bipartite",
-            clearable=False,
-        ),
-
-        dcc.Checklist(
-            id="edge-style",
-            options=[{"label": " Thickness by weight", "value": "thick"}],
-            value=["thick"],
-            style={"marginTop": "10px"},
-        ),
-
-        html.Hr(style={"margin": "14px 0"}),
-
-        html.H4("Filters", style={"color": "#003566"}),
-
-        html.Label("Minimum node degree"),
-        dcc.Slider(
-            id="min-degree",
-            min=0, max=20, step=1, value=0,
-            marks=None,
-            tooltip={"placement": "right"},
-            updatemode="mouseup",
-        ),
-
-        html.Label("Edge width range", style={"marginTop": "10px"}),
-        dcc.RangeSlider(
-            id="edge-width-range",
-            min=1,
-            max=10,
-            step=0.5,
-            value=[1.5, 6.0],
-            marks=None,
-            tooltip={"placement": "right"},
-            updatemode="mouseup",
-        ),
-
-        html.Label("Weight range for scaling (−log10 adj p)", style={"marginTop": "10px"}),
-        dcc.RangeSlider(
-            id="edge-weight-range",
-            min=0,
-            max=20,
-            step=0.5,
-            value=[0, 10],
-            marks=None,
-            tooltip={"placement": "right"},
-            updatemode="mouseup",
-        ),
-
-        html.Label("Minimum edge weight", style={"marginTop": "10px"}),
-        dcc.Slider(
-            id="min-weight",
-            min=0, max=10, step=0.5, value=0,
-            marks=None,
-            tooltip={"placement": "right"},
-            updatemode="mouseup",
-        ),
-
-        html.Label("Maximum number of groups", style={"marginTop": "10px"}),
-        dcc.Slider(
-            id="max-groups",
-            min=5, max=200, step=5, value=50,
-            marks=None,
-            tooltip={"placement": "right"},
-            updatemode="mouseup",
-        ),
-
-        # -------- Advanced uploads (optional) --------
-        html.Hr(style={"margin": "14px 0"}),
-
-        html.H4("Advanced (optional)", style={"color": "#003566"}),
-        dcc.Checklist(
-            id="use-prebuilt",
-            options=[{"label": " Use prebuilt nodes/edges instead", "value": "yes"}],
-            value=[],
-            style={"marginBottom": "8px"},
-        ),
-
-        dcc.Upload(
-            id="upload-nodes",
-            children=html.Div(["Upload nodes.csv"]),
-            style={
-                "width": "100%",
-                "padding": "10px",
-                "borderWidth": "1px",
-                "borderStyle": "dashed",
-                "borderRadius": "10px",
-                "textAlign": "center",
-                "background": "#f8fafc",
-            },
-            multiple=False,
-        ),
-
-        dcc.Upload(
-            id="upload-edges",
-            children=html.Div(["Upload edges.csv"]),
-            style={
-                "width": "100%",
-                "padding": "10px",
-                "borderWidth": "1px",
-                "borderStyle": "dashed",
-                "borderRadius": "10px",
-                "textAlign": "center",
-                "background": "#f8fafc",
-                "marginTop": "8px",
-            },
-            multiple=False,
-        ),
-
-        html.Div(id="prebuilt-status", style={"marginTop": "8px", "fontSize": "0.9rem"}),
-
-        # -------- Export --------
-        html.Hr(style={"margin": "14px 0"}),
-
-        html.H4("Export", style={"color": "#003566"}),
-        html.Div("Downloads appear after graph build.", style={"fontSize": "0.9rem", "color": "#4b5563"}),
-
-        dcc.Download(id="dl-nodes"),
-        dcc.Download(id="dl-edges"),
-
-        html.Button(
-            "Download nodes.csv",
-            id="btn-dl-nodes",
-            n_clicks=0,
-            style={
-                "marginTop": "10px",
-                "width": "100%",
-                "padding": "10px",
-                "borderRadius": "10px",
-                "border": "1px solid #0077b6",
-                "background": "white",
-                "color": "#0077b6",
-                "fontWeight": "800",
-                "cursor": "pointer",
-            },
-        ),
-
-        html.Button(
-            "Download edges.csv",
-            id="btn-dl-edges",
-            n_clicks=0,
-            style={
-                "marginTop": "8px",
-                "width": "100%",
-                "padding": "10px",
-                "borderRadius": "10px",
-                "border": "1px solid #0077b6",
-                "background": "white",
-                "color": "#0077b6",
-                "fontWeight": "800",
-                "cursor": "pointer",
-            },
-        ),
-    ],
-),
 
         main_panel,
     ],
 )
+
 
 # ----------------------------
 # Callbacks
@@ -1070,7 +1073,6 @@ def build_graph(n_clicks, raw_json, item_col, group_col, weight_col):
     Input("min-weight", "value"),
     Input("max-groups", "value"),
     Input("layout-mode", "value"),
-    
 )
 def update_plot_and_stats(graph_data, search, min_degree, min_weight, max_groups, layout_mode):
     if not graph_data:
@@ -1090,8 +1092,8 @@ def update_plot_and_stats(graph_data, search, min_degree, min_weight, max_groups
         attrs.pop("target", None)
         g.add_edge(u, v, **attrs)
 
-    largest_component_only = "lcc" in   []
-    show_labels = "labels" in   []
+    largest_component_only = "lcc" in []
+    show_labels = "labels" in []
 
     sg = subgraph_filter(
         g,
@@ -1129,7 +1131,7 @@ def update_plot_and_stats(graph_data, search, min_degree, min_weight, max_groups
     )
 
     top_groups_data = [{"group": name, "degree": deg} for name, deg in st["top_groups"]]
-    top_items_data  = [{"item": name, "degree": deg} for name, deg in st["top_items"]]
+    top_items_data = [{"item": name, "degree": deg} for name, deg in st["top_items"]]
 
     return fig, cards, top_groups_data, top_items_data
 
@@ -1160,4 +1162,7 @@ def download_edges(n, store):
 
 if __name__ == "__main__":
     app.run_server(host="0.0.0.0", port=8050, debug=True)
+
+
+
 
