@@ -4,7 +4,7 @@ from typing import Dict, Tuple
 from typing import Dict
 import networkx as nx
 import numpy as np
-
+import base64
 import pandas as pd
 import networkx as nx
 import plotly.graph_objects as go
@@ -1162,6 +1162,7 @@ def download_edges(n, store):
 
 if __name__ == "__main__":
     app.run_server(host="0.0.0.0", port=8050, debug=True)
+
 
 
 
