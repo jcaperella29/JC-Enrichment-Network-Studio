@@ -4,12 +4,17 @@ WORKDIR /app
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PORT=8080 \
+    BROWSER_PATH=/usr/bin/chromium \
+    CHROME_PATH=/usr/bin/chromium
 
-# System deps (safe baseline for scientific wheels if any fallback builds happen)
+# Chromium is required by Kaleido v1+ for Plotly SVG/PDF export.
+# fonts-liberation helps exported figures render text cleanly.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
+    chromium \
+    fonts-liberation \
+    ca-certificates \
     curl \
   && rm -rf /var/lib/apt/lists/*
 
@@ -18,7 +23,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 
-ENV PORT=8080
 EXPOSE 8080
 
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "app:server", "--workers", "2", "--threads", "4", "--timeout", "120"]
+CMD ["sh", "-c", "gunicorn -b 0.0.0.0:${PORT:-8080} app:server --workers 2 --threads 4 --timeout 180"]
