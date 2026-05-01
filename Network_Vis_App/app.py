@@ -88,6 +88,171 @@ def load_demo_dataframe() -> pd.DataFrame:
 
     return long_df
 
+
+COLUMN_MAPPING_PRESETS = [
+    {"label": "Custom long-format CSV", "value": "custom_long"},
+    {"label": "Enrichr-style: term + semicolon genes", "value": "enrichr"},
+    {"label": "g:Profiler / gprofiler2-style", "value": "gprofiler"},
+    {"label": "clusterProfiler-style", "value": "clusterprofiler"},
+    {"label": "GSEA / MSigDB-style", "value": "gsea_msigdb"},
+]
+
+
+def _normalize_col_name(name: str) -> str:
+    """Normalize column names for forgiving preset matching."""
+    return "".join(ch for ch in str(name).lower() if ch.isalnum())
+
+
+def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    """Find a dataframe column from likely names, ignoring case/punctuation."""
+    normalized = {_normalize_col_name(c): c for c in df.columns}
+    for candidate in candidates:
+        hit = normalized.get(_normalize_col_name(candidate))
+        if hit is not None:
+            return hit
+    return None
+
+
+def _guess_long_format_columns(df: pd.DataFrame) -> tuple[str | None, str | None, str | None]:
+    """Guess item/group/weight columns for already-long enrichment edge tables."""
+    item_col = _find_col(
+        df,
+        [
+            "gene", "genes", "item", "items", "symbol", "gene_symbol", "geneid",
+            "gene_id", "target", "feature", "node", "protein",
+        ],
+    )
+    group_col = _find_col(
+        df,
+        [
+            "term", "pathway", "pathways", "group", "description", "name",
+            "term_name", "termid", "term_id", "geneset", "gene_set",
+        ],
+    )
+    weight_col = _find_col(
+        df,
+        [
+            "adjusted_pvalue", "adjusted_p_value", "adjusted p-value", "adjusted p value",
+            "adjusted.p.value", "padj", "p.adjust", "p_adjust", "qvalue", "q_value",
+            "fdr", "fdr q-val", "fdr_q_val", "p_value", "pvalue", "p.val", "pval",
+        ],
+    )
+    return item_col, group_col, weight_col
+
+
+def _split_gene_memberships(value) -> list[str]:
+    """Split common enrichment gene-list cells into individual gene symbols/items."""
+    import re
+
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return []
+
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "null"}:
+        return []
+
+    # clusterProfiler often uses '/', Enrichr often ';', many CSV exports use ','.
+    # Also handle pipes and whitespace as secondary separators.
+    parts = re.split(r"[;,/|]+", text)
+    genes = [p.strip() for p in parts if p and p.strip()]
+    return genes
+
+
+def _expand_membership_table(
+    df: pd.DataFrame,
+    term_col: str,
+    genes_col: str,
+    weight_col: str | None,
+    preset_label: str,
+) -> tuple[pd.DataFrame, str, str, str | None, str]:
+    """Convert term -> gene-list tables into long gene -> term membership rows."""
+    records = []
+
+    for _, row in df.iterrows():
+        term = row.get(term_col)
+        genes = _split_gene_memberships(row.get(genes_col))
+        if term is None or pd.isna(term) or not str(term).strip():
+            continue
+        for gene in genes:
+            rec = {"gene": gene, "term": str(term).strip()}
+            if weight_col:
+                rec["adjusted_pvalue"] = row.get(weight_col)
+            records.append(rec)
+
+    if not records:
+        raise ValueError(
+            f"{preset_label} preset found columns, but no gene memberships could be expanded. "
+            "Check the gene-list separator or choose Custom long-format CSV."
+        )
+
+    long_df = pd.DataFrame(records).drop_duplicates()
+    item_col = "gene"
+    group_col = "term"
+    out_weight_col = "adjusted_pvalue" if "adjusted_pvalue" in long_df.columns else None
+
+    msg = (
+        f"Applied {preset_label} preset: expanded {len(long_df):,} gene-term edges "
+        f"from {long_df['gene'].nunique():,} genes/items and {long_df['term'].nunique():,} pathways/terms."
+    )
+    return long_df, item_col, group_col, out_weight_col, msg
+
+
+def apply_column_mapping_preset(df: pd.DataFrame, preset: str) -> tuple[pd.DataFrame, str | None, str | None, str | None, str]:
+    """
+    Apply a column mapping preset.
+
+    For term -> gene-list formats, this converts the table into the long-format
+    gene ↔ pathway edge table used by the network builder.
+    """
+    preset = preset or "custom_long"
+
+    if preset == "custom_long":
+        item_col, group_col, weight_col = _guess_long_format_columns(df)
+        msg = "Applied Custom long-format preset."
+        if item_col and group_col:
+            msg += f" Guessed item={item_col}, group={group_col}"
+            if weight_col:
+                msg += f", weight={weight_col}"
+            msg += "."
+        else:
+            msg += " Select item and group columns manually."
+        return df, item_col, group_col, weight_col, msg
+
+    if preset == "enrichr":
+        term_col = _find_col(df, ["term", "Term", "name", "pathway", "description"])
+        genes_col = _find_col(df, ["genes", "Genes", "overlapping genes", "overlap_genes"])
+        weight_col = _find_col(df, ["adjusted_pvalue", "Adjusted.P.value", "Adjusted P-value", "adjusted p value", "padj", "fdr", "pvalue", "p_value"])
+        if not term_col or not genes_col:
+            raise ValueError("Enrichr preset needs a term column and a genes column.")
+        return _expand_membership_table(df, term_col, genes_col, weight_col, "Enrichr-style")
+
+    if preset == "gprofiler":
+        term_col = _find_col(df, ["term_name", "name", "term", "native", "term_id", "description"])
+        genes_col = _find_col(df, ["intersection", "intersections", "genes", "query", "members"])
+        weight_col = _find_col(df, ["p_value", "pvalue", "adjusted_pvalue", "padj", "fdr", "qvalue"])
+        if not term_col or not genes_col:
+            raise ValueError("g:Profiler preset needs a term/name column and an intersection/genes column.")
+        return _expand_membership_table(df, term_col, genes_col, weight_col, "g:Profiler/gprofiler2-style")
+
+    if preset == "clusterprofiler":
+        term_col = _find_col(df, ["Description", "description", "term", "pathway", "ID", "id"])
+        genes_col = _find_col(df, ["geneID", "gene_id", "genes", "Genes", "core_enrichment"])
+        weight_col = _find_col(df, ["p.adjust", "p_adjust", "padj", "qvalue", "pvalue", "p_value"])
+        if not term_col or not genes_col:
+            raise ValueError("clusterProfiler preset needs Description/ID and geneID/core_enrichment columns.")
+        return _expand_membership_table(df, term_col, genes_col, weight_col, "clusterProfiler-style")
+
+    if preset == "gsea_msigdb":
+        term_col = _find_col(df, ["NAME", "name", "Description", "description", "term", "pathway", "geneset", "gene_set"])
+        genes_col = _find_col(df, ["core_enrichment", "leading_edge", "leading edge", "genes", "Genes", "members"])
+        weight_col = _find_col(df, ["FDR q-val", "FDR.q.val", "fdr", "qvalue", "q_value", "p.adjust", "padj", "pvalue", "p_value"])
+        if not term_col or not genes_col:
+            raise ValueError("GSEA/MSigDB preset needs a NAME/term column and core_enrichment/genes column.")
+        return _expand_membership_table(df, term_col, genes_col, weight_col, "GSEA/MSigDB-style")
+
+    raise ValueError(f"Unknown column mapping preset: {preset}")
+
+
 import math
 import pandas as pd
 import networkx as nx
@@ -2037,7 +2202,39 @@ app.layout = html.Div(
                 html.Div(
                     style={"marginTop": "12px"},
                     children=[
-                        html.Label("Item column (genes)"),
+                        html.Label("Column mapping preset"),
+                        dcc.Dropdown(
+                            id="column-preset",
+                            options=COLUMN_MAPPING_PRESETS,
+                            value="custom_long",
+                            clearable=False,
+                        ),
+                        html.Button(
+                            "Apply column preset",
+                            id="btn-apply-preset",
+                            n_clicks=0,
+                            style={
+                                "marginTop": "8px",
+                                "width": "100%",
+                                "padding": "9px",
+                                "borderRadius": "10px",
+                                "border": "1px solid #003566",
+                                "background": "white",
+                                "color": "#003566",
+                                "fontWeight": "800",
+                                "cursor": "pointer",
+                            },
+                        ),
+                        html.Div(
+                            id="preset-status",
+                            style={
+                                "marginTop": "8px",
+                                "fontSize": "0.9rem",
+                                "color": "#475569",
+                            },
+                        ),
+
+                        html.Label("Item column (genes)", style={"marginTop": "10px"}),
                         dcc.Dropdown(id="item-col", placeholder="Select…"),
 
                         html.Label("Group column (pathways/terms)", style={"marginTop": "10px"}),
@@ -2693,6 +2890,61 @@ def on_raw_upload(contents):
     except Exception as e:
         status = html.Span(f"Upload error: {e}", style={"color": "#b91c1c"})
         return None, status, [], [], []
+
+
+@app.callback(
+    Output("store-raw-df", "data", allow_duplicate=True),
+    Output("raw-upload-status", "children", allow_duplicate=True),
+    Output("preset-status", "children"),
+    Output("item-col", "options", allow_duplicate=True),
+    Output("group-col", "options", allow_duplicate=True),
+    Output("weight-col", "options", allow_duplicate=True),
+    Output("item-col", "value", allow_duplicate=True),
+    Output("group-col", "value", allow_duplicate=True),
+    Output("weight-col", "value", allow_duplicate=True),
+    Input("btn-apply-preset", "n_clicks"),
+    State("store-raw-df", "data"),
+    State("column-preset", "value"),
+    prevent_initial_call=True,
+    running=[
+        (Output("preset-status", "children"), "Applying column preset...", ""),
+        (Output("btn-apply-preset", "disabled"), True, False),
+    ],
+)
+def on_apply_column_preset(n_clicks, raw_json, preset):
+    if not n_clicks:
+        return no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update
+
+    if not raw_json:
+        msg = html.Span("Upload a CSV or load the demo dataset first.", style={"color": "#b91c1c"})
+        return no_update, no_update, msg, no_update, no_update, no_update, no_update, no_update, no_update
+
+    try:
+        df = pd.read_json(StringIO(raw_json), orient="split")
+        mapped_df, item_col, group_col, weight_col, preset_msg = apply_column_mapping_preset(df, preset)
+        cols = [{"label": c, "value": c} for c in mapped_df.columns]
+
+        upload_status = html.Span(
+            f"Preset-ready table: {mapped_df.shape[0]:,} rows × {mapped_df.shape[1]} cols",
+            style={"color": "#065f46"},
+        )
+        preset_status = html.Span(preset_msg, style={"color": "#065f46"})
+
+        return (
+            mapped_df.to_json(date_format="iso", orient="split"),
+            upload_status,
+            preset_status,
+            cols,
+            cols,
+            [{"label": "None", "value": ""}] + cols,
+            item_col,
+            group_col,
+            weight_col or "",
+        )
+
+    except Exception as e:
+        msg = html.Span(f"Preset error: {e}", style={"color": "#b91c1c"})
+        return no_update, no_update, msg, no_update, no_update, no_update, no_update, no_update, no_update
 
 
 @app.callback(
@@ -3535,3 +3787,5 @@ if __name__ == "__main__":
 
 
 
+
+      
