@@ -2,8 +2,71 @@
 
 **A zero-preprocessing enrichment network workbench for turning pathway enrichment results into interactive gene-pathway networks, pathway-overlap projections, diffusion-based candidate rankings, and reproducible export bundles.**
 
+
+---
+
+## 📸 Screenshots
+
+### Main Network + Sidebar Controls
+
+The main workflow starts with uploading or loading enrichment data, selecting a preset, mapping columns, and building the gene ↔ pathway network.
+
+![Main network and sidebar controls](NETWORK_SCREESHOTS/main_plot_and_sidebar.png)
+
+---
+
+### Network Statistics
+
+The Stats tab summarizes graph size, connected components, top pathways/groups, top genes/items, and edge-weight information.
+
+![Network statistics](NETWORK_SCREESHOTS/stats.png)
+
+---
+
+### Bipartite Diffusion Rankings
+
+The Bipartite Diffusion tab ranks pathways and genes/items using random-walk diffusion over the main gene ↔ pathway graph.
+
+![Bipartite diffusion rankings](NETWORK_SCREESHOTS/diffusion_rankings.png)
+
+---
+
+### Pathway Projection Graph
+
+The Projection tab builds a pathway ↔ pathway overlap network from shared genes/items.
+
+![Pathway projection graph](NETWORK_SCREESHOTS/projection_graph.png)
+
+---
+
+### Projection Rankings
+
+Projection rankings identify central pathway themes in the pathway-only overlap graph.
+
+![Projection rankings](NETWORK_SCREESHOTS/projection_rankings.png)
+
+---
+
+### Consensus Candidates
+
+Consensus candidates combine bipartite diffusion and projection diffusion signals into a final prioritized pathway list.
+
+![Consensus candidates](NETWORK_SCREESHOTS/Concensus.png)
+
+---
+
+### Export Buttons
+
+The sidebar includes full Network Studio report export and LLM Triage bundle export. The LLM Triage export is a safe handoff bundle and does not run a live public LLM call.
+
+![Export buttons](NETWORK_SCREESHOTS/Export_buttons.png)
+
+---
+
 👉 **Live App:**  
 https://jc-enrichment-network-studio232-390287836436.europe-west1.run.app/
+
+
 
 ---
 
