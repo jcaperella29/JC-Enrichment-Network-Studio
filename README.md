@@ -59,7 +59,7 @@ Consensus candidates combine bipartite diffusion and projection diffusion signal
 
 The sidebar includes full Network Studio report export and LLM Triage bundle export. The LLM Triage export is a safe handoff bundle and does not run a live public LLM call.
 
-![Export buttons](NETWORK_SCREESHOTS/Export_buttons.png)
+![Export buttons](NETWORK_SCREEENSHOTS/Export_buttons.png)
 
 ---
 
