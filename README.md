@@ -11,7 +11,7 @@
 
 The main workflow starts with uploading or loading enrichment data, selecting a preset, mapping columns, and building the gene ↔ pathway network.
 
-![Main network and sidebar controls](NETWORK_SCREESHOTS/main_plot_and_sidebar.png)
+![Main network and sidebar controls](NETWORK_SCREEENSHOTS/main_plot_and_sidebar.png)
 
 ---
 
@@ -19,7 +19,7 @@ The main workflow starts with uploading or loading enrichment data, selecting a 
 
 The Stats tab summarizes graph size, connected components, top pathways/groups, top genes/items, and edge-weight information.
 
-![Network statistics](NETWORK_SCREESHOTS/stats.png)
+![Network statistics](NETWORK_SCREEENSHOTS/stats.png)
 
 ---
 
@@ -27,7 +27,7 @@ The Stats tab summarizes graph size, connected components, top pathways/groups, 
 
 The Bipartite Diffusion tab ranks pathways and genes/items using random-walk diffusion over the main gene ↔ pathway graph.
 
-![Bipartite diffusion rankings](NETWORK_SCREESHOTS/diffusion_rankings.png)
+![Bipartite diffusion rankings](NETWORK_SCREEENSHOTS/diffusion_rankings.png)
 
 ---
 
@@ -35,7 +35,7 @@ The Bipartite Diffusion tab ranks pathways and genes/items using random-walk dif
 
 The Projection tab builds a pathway ↔ pathway overlap network from shared genes/items.
 
-![Pathway projection graph](NETWORK_SCREESHOTS/projection_graph.png)
+![Pathway projection graph](NETWORK_SCREEENSHOTS/projection_graph.png)
 
 ---
 
@@ -43,7 +43,7 @@ The Projection tab builds a pathway ↔ pathway overlap network from shared gene
 
 Projection rankings identify central pathway themes in the pathway-only overlap graph.
 
-![Projection rankings](NETWORK_SCREESHOTS/projection_rankings.png)
+![Projection rankings](NETWORK_SCREEENSHOTS/projection_rankings.png)
 
 ---
 
@@ -51,7 +51,7 @@ Projection rankings identify central pathway themes in the pathway-only overlap 
 
 Consensus candidates combine bipartite diffusion and projection diffusion signals into a final prioritized pathway list.
 
-![Consensus candidates](NETWORK_SCREESHOTS/Concensus.png)
+![Consensus candidates](NETWORK_SCREEENSHOTS/Concensus.png)
 
 ---
 
@@ -64,7 +64,7 @@ The sidebar includes full Network Studio report export and LLM Triage bundle exp
 ---
 
 👉 **Live App:**  
-https://jc-enrichment-network-studio232-390287836436.europe-west1.run.app/
+https://jc-enrichment-network-studio121-390287836436.northamerica-northeast1.run.app/
 
 
 
