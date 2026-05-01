@@ -766,6 +766,75 @@ def graph_stats(g: nx.Graph) -> Dict[str, object]:
     )
 
 
+# ----------------------------
+# Large graph warning helpers
+# ----------------------------
+LARGE_GRAPH_NODE_WARNING = 1500
+LARGE_GRAPH_EDGE_WARNING = 5000
+VERY_LARGE_RENDER_NODE_LIMIT = 1200
+VERY_LARGE_RENDER_EDGE_LIMIT = 4000
+
+
+def graph_size_warning_component(node_count: int, edge_count: int, context: str = "network"):
+    """Return a small UI warning for large graphs, or an empty string for normal sizes."""
+    if node_count < LARGE_GRAPH_NODE_WARNING and edge_count < LARGE_GRAPH_EDGE_WARNING:
+        return ""
+
+    return html.Div(
+        style={
+            "border": "1px solid #fed7aa",
+            "borderLeft": "5px solid #f97316",
+            "borderRadius": "10px",
+            "padding": "10px",
+            "background": "#fff7ed",
+            "color": "#7c2d12",
+            "fontSize": "0.86rem",
+            "lineHeight": "1.35",
+            "marginTop": "10px",
+        },
+        children=[
+            html.Div("Large graph warning", style={"fontWeight": "800", "marginBottom": "4px"}),
+            html.Div(
+                f"The current {context} has {node_count:,} nodes and {edge_count:,} edges. "
+                "Rendering may be slow."
+            ),
+            html.Div(
+                "Try increasing minimum node degree, increasing minimum edge weight, reducing maximum groups, "
+                "using search to focus on a pathway family, or switching away from force-directed layout.",
+                style={"marginTop": "4px"},
+            ),
+        ],
+    )
+
+
+def large_graph_placeholder_figure(node_count: int, edge_count: int) -> go.Figure:
+    """Avoid trying to render extremely large filtered graphs in the browser."""
+    fig = go.Figure()
+    fig.update_layout(
+        annotations=[
+            dict(
+                text=(
+                    "Large filtered graph skipped for browser performance.<br>"
+                    f"Filtered graph: {node_count:,} nodes, {edge_count:,} edges.<br>"
+                    "Use min degree, min edge weight, max groups, or search filters to reduce the graph."
+                ),
+                showarrow=False,
+                x=0.5,
+                y=0.5,
+                xref="paper",
+                yref="paper",
+                font=dict(size=16),
+                align="center",
+            )
+        ],
+        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+    )
+    return fig
+
+
+
 def rebuild_graph_from_store(graph_data: dict) -> nx.Graph:
     """Rebuild a NetworkX graph from the serialized Dash store."""
     g = nx.Graph()
@@ -2103,6 +2172,7 @@ main_panel = html.Div(
         dcc.Download(id="dl-projection-svg"),
         dcc.Download(id="dl-projection-pdf"),
         dcc.Download(id="dl-report-bundle"),
+        dcc.Download(id="dl-llm-triage-bundle"),
     ],
 )
 
@@ -2262,6 +2332,8 @@ app.layout = html.Div(
                     },
                 ),
 
+                html.Div(id="graph-size-warning"),
+
                 html.Div(
                     style={
                         "border": "1px solid #CBD5E1",
@@ -2305,6 +2377,60 @@ app.layout = html.Div(
                         ),
                         html.Div(
                             id="report-bundle-running-status",
+                            style={
+                                "marginTop": "6px",
+                                "fontSize": "0.86rem",
+                                "color": "#7c2d12",
+                                "lineHeight": "1.35",
+                            },
+                        ),
+                    ],
+                ),
+
+                html.Div(
+                    style={
+                        "border": "1px solid #CBD5E1",
+                        "borderRadius": "12px",
+                        "padding": "12px",
+                        "background": "#F8FAFC",
+                        "marginTop": "12px",
+                    },
+                    children=[
+                        html.H4(
+                            "LLM Triage export",
+                            style={"marginTop": 0, "marginBottom": "6px", "color": "#003566"},
+                        ),
+                        html.Div(
+                            "Use this after running the graph, projection, diffusion analyses, and consensus candidates. "
+                            "This creates an input bundle for the companion LLM Triage workflow. It does not run an LLM or spend API credits.",
+                            style={"fontSize": "0.86rem", "color": "#475569", "marginBottom": "10px"},
+                        ),
+                        html.Button(
+                            "Export for LLM Triage",
+                            id="btn-dl-llm-triage-bundle",
+                            n_clicks=0,
+                            style={
+                                "width": "100%",
+                                "padding": "10px",
+                                "borderRadius": "10px",
+                                "border": "1px solid #003566",
+                                "background": "white",
+                                "color": "#003566",
+                                "fontWeight": "800",
+                                "cursor": "pointer",
+                            },
+                        ),
+                        html.Div(
+                            id="llm-triage-bundle-status",
+                            style={
+                                "marginTop": "8px",
+                                "fontSize": "0.86rem",
+                                "color": "#475569",
+                                "lineHeight": "1.35",
+                            },
+                        ),
+                        html.Div(
+                            id="llm-triage-bundle-running-status",
                             style={
                                 "marginTop": "6px",
                                 "fontSize": "0.86rem",
@@ -2549,6 +2675,33 @@ def build_main_graph_figure_for_export(
         max_groups=int(max_groups or 50),
         largest_component_only=False,
     )
+
+    if (
+        sg.number_of_nodes() > VERY_LARGE_RENDER_NODE_LIMIT
+        or sg.number_of_edges() > VERY_LARGE_RENDER_EDGE_LIMIT
+    ):
+        st = graph_stats(sg)
+        fig = large_graph_placeholder_figure(sg.number_of_nodes(), sg.number_of_edges())
+        cards = html.Div(
+            style={
+                "border": "1px solid #fed7aa",
+                "borderLeft": "5px solid #f97316",
+                "borderRadius": "12px",
+                "padding": "12px",
+                "background": "#fff7ed",
+                "color": "#7c2d12",
+            },
+            children=[
+                html.Div("Filtered graph is too large to render smoothly.", style={"fontWeight": "800"}),
+                html.Div(
+                    f"Filtered graph: {st['nodes']:,} nodes, {st['edges']:,} edges. "
+                    "Increase min degree/edge weight, reduce max groups, or search for a pathway family."
+                ),
+            ],
+        )
+        top_groups_data = [{"group": name, "degree": deg} for name, deg in st["top_groups"]]
+        top_items_data = [{"item": name, "degree": deg} for name, deg in st["top_items"]]
+        return fig, cards, top_groups_data, top_items_data
 
     if layout_mode == "force":
         pos = nx.spring_layout(sg, seed=7, k=1 / math.sqrt(max(1, sg.number_of_nodes())))
@@ -2868,6 +3021,95 @@ Projection network = pathway-overlap graph, not a replacement for the main gene-
 
     return buf.getvalue()
 
+def build_llm_triage_bundle_zip(
+    raw_json,
+    graph_data,
+    nodes_edges_store,
+    projection_data,
+    projection_export_store,
+    markov_store,
+    projection_diffusion_store,
+    consensus_store,
+    mapped_columns,
+    settings,
+) -> bytes:
+    """
+    Build the companion LLM Triage input bundle.
+
+    This export is intentionally API-safe: it does not call an LLM, PubMed,
+    OpenAI, or any paid service. It only packages Network Studio outputs into
+    a clean folder that a local/BYOK/paid/consulting LLM Triage workflow can ingest.
+    """
+    buf = io.BytesIO()
+
+    run_summary = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "product": "Enrichment Network Studio",
+        "bundle_type": "llm_triage_input_bundle",
+        "purpose": "Input package for the companion Enrichment LLM Triage workflow.",
+        "api_safety": "This export does not run an LLM, call PubMed, or spend API credits.",
+        "important_note": (
+            "Diffusion, follow-up, and consensus scores are prioritization scores, "
+            "not statistical p-values. Use adjusted p-values from the original input "
+            "as statistical enrichment evidence."
+        ),
+    }
+
+    manifest = {
+        "created_at": run_summary["created_at"],
+        "product": "Enrichment Network Studio",
+        "bundle_type": "llm_triage_input_bundle",
+        "mapped_columns": mapped_columns,
+        "settings": settings,
+        "expected_consumer": "Enrichment LLM Triage companion app or paid/BYOK/local workflow",
+        "api_safety": "No live LLM call is made by this export.",
+    }
+
+    interpretation_notes = """# LLM Triage Input Notes
+
+This bundle was generated by Enrichment Network Studio.
+
+It is meant to be uploaded into, or consumed by, the companion Enrichment LLM Triage workflow.
+
+This public Network Studio export does **not** run an LLM, call PubMed, or spend API credits.
+
+## Score caveats
+
+- Adjusted p-value = statistical enrichment evidence from the original input table.
+- Edge weight = transformed evidence, usually -log10(adjusted p-value).
+- Diffusion score = network prioritization score, not a p-value.
+- Follow-up score = practical triage score combining diffusion, evidence, and support breadth.
+- Consensus score = agreement between main bipartite and pathway-projection rankings.
+- Projection network = pathway-overlap graph, not a replacement for the main gene-pathway graph.
+
+LLM interpretation is assistive and should be reviewed by a scientist.
+"""
+
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        z.writestr("llm_triage_input/run_summary.json", json.dumps(run_summary, indent=2))
+        z.writestr("llm_triage_input/mapped_columns.json", json.dumps(mapped_columns, indent=2))
+        z.writestr("llm_triage_input/settings_manifest.json", json.dumps(manifest, indent=2))
+        z.writestr("llm_triage_input/interpretation_notes.md", interpretation_notes)
+
+        if raw_json:
+            try:
+                raw_df = pd.read_json(StringIO(raw_json), orient="split")
+                z.writestr("llm_triage_input/input_preview.csv", raw_df.head(500).to_csv(index=False))
+            except Exception as e:
+                z.writestr("llm_triage_input/input_preview_error.txt", f"Could not export input preview: {e}")
+
+        z.writestr("llm_triage_input/main_nodes.csv", _safe_csv_from_store(nodes_edges_store, "nodes_csv"))
+        z.writestr("llm_triage_input/main_edges.csv", _safe_csv_from_store(nodes_edges_store, "edges_csv"))
+        z.writestr("llm_triage_input/projection_nodes.csv", _safe_csv_from_store(projection_export_store, "nodes_csv"))
+        z.writestr("llm_triage_input/projection_edges.csv", _safe_csv_from_store(projection_export_store, "edges_csv"))
+        z.writestr("llm_triage_input/bipartite_diffusion_results.csv", _safe_csv_from_store(markov_store, "csv"))
+        z.writestr("llm_triage_input/bipartite_top_candidates.csv", _safe_csv_from_store(markov_store, "candidate_csv"))
+        z.writestr("llm_triage_input/projection_diffusion_results.csv", _safe_csv_from_store(projection_diffusion_store, "csv"))
+        z.writestr("llm_triage_input/projection_top_candidates.csv", _safe_csv_from_store(projection_diffusion_store, "candidate_csv"))
+        z.writestr("llm_triage_input/consensus_candidates.csv", _safe_csv_from_store(consensus_store, "csv"))
+
+    return buf.getvalue()
+
 # ----------------------------
 # Callbacks
 # ----------------------------
@@ -3003,6 +3245,7 @@ def on_load_demo(n_clicks):
     Output("store-graph", "data"),
     Output("store-nodes-edges-df", "data"),
     Output("plot-hint", "children"),
+    Output("graph-size-warning", "children"),
     Input("btn-build", "n_clicks"),
     State("store-raw-df", "data"),
     State("item-col", "value"),
@@ -3016,10 +3259,10 @@ def on_load_demo(n_clicks):
 )
 def build_graph(n_clicks, raw_json, item_col, group_col, weight_col):
     if not raw_json:
-        return no_update, no_update, "Upload a raw CSV first."
+        return no_update, no_update, "Upload a raw CSV first.", ""
 
     if not item_col or not group_col:
-        return no_update, no_update, "Select the item and group columns, then click build."
+        return no_update, no_update, "Select the item and group columns, then click build.", ""
 
     df = pd.read_json(StringIO(raw_json), orient="split")
     wcol = weight_col if (weight_col and weight_col in df.columns) else None
@@ -3032,12 +3275,17 @@ def build_graph(n_clicks, raw_json, item_col, group_col, weight_col):
     nodes_df = pd.DataFrame(nodes)
     edges_df = pd.DataFrame(edges)
 
-    hint = f"Graph built: {g.number_of_nodes():,} nodes, {g.number_of_edges():,} edges. Use sidebar controls to explore."
+    node_count = g.number_of_nodes()
+    edge_count = g.number_of_edges()
+    hint = f"Graph built: {node_count:,} nodes, {edge_count:,} edges. Use sidebar controls to explore."
+
+    warning = graph_size_warning_component(node_count, edge_count, context="raw graph")
 
     return (
         {"nodes": nodes, "edges": edges},
         {"nodes_csv": nodes_df.to_csv(index=False), "edges_csv": edges_df.to_csv(index=False)},
         hint,
+        warning,
     )
 
 
@@ -3706,6 +3954,146 @@ def download_report_bundle(
 
 
 @app.callback(
+    Output("dl-llm-triage-bundle", "data"),
+    Output("llm-triage-bundle-status", "children"),
+    Input("btn-dl-llm-triage-bundle", "n_clicks"),
+    State("store-raw-df", "data"),
+    State("store-graph", "data"),
+    State("store-nodes-edges-df", "data"),
+    State("store-projection-graph", "data"),
+    State("store-projection-export", "data"),
+    State("store-markov-results", "data"),
+    State("store-projection-diffusion-results", "data"),
+    State("store-consensus-results", "data"),
+    State("item-col", "value"),
+    State("group-col", "value"),
+    State("weight-col", "value"),
+    State("search", "value"),
+    State("min-degree", "value"),
+    State("min-weight", "value"),
+    State("max-groups", "value"),
+    State("layout-mode", "value"),
+    State("edge-style", "value"),
+    State("edge-width-range", "value"),
+    State("edge-weight-range", "value"),
+    State("markov-alpha", "value"),
+    State("markov-ranking-mode", "value"),
+    State("markov-top-n", "value"),
+    State("projection-method", "value"),
+    State("projection-top-n", "value"),
+    State("projection-show-labels", "value"),
+    State("projection-diffusion-alpha", "value"),
+    State("projection-diffusion-ranking-mode", "value"),
+    State("projection-diffusion-top-n", "value"),
+    State("consensus-top-n", "value"),
+    prevent_initial_call=True,
+    running=[
+        (Output("llm-triage-bundle-running-status", "children"), "Generating LLM Triage input bundle. Please wait...", ""),
+        (Output("btn-dl-llm-triage-bundle", "disabled"), True, False),
+    ],
+)
+def download_llm_triage_bundle(
+    n_clicks,
+    raw_json,
+    graph_data,
+    nodes_edges_store,
+    projection_data,
+    projection_export_store,
+    markov_store,
+    projection_diffusion_store,
+    consensus_store,
+    item_col,
+    group_col,
+    weight_col,
+    search,
+    min_degree,
+    min_weight,
+    max_groups,
+    layout_mode,
+    edge_style,
+    edge_width_range,
+    edge_weight_range,
+    markov_alpha,
+    markov_ranking_mode,
+    markov_top_n,
+    projection_method,
+    projection_top_n,
+    projection_show_labels,
+    projection_diffusion_alpha,
+    projection_diffusion_ranking_mode,
+    projection_diffusion_top_n,
+    consensus_top_n,
+):
+    if not n_clicks:
+        return no_update, ""
+
+    if not graph_data:
+        return no_update, "Build the main graph before exporting the LLM Triage bundle."
+
+    mapped_columns = {
+        "item_col": item_col,
+        "group_col": group_col,
+        "weight_col": weight_col,
+    }
+
+    settings = {
+        "main_graph": {
+            "search": search or "",
+            "min_degree": int(min_degree or 0),
+            "min_weight": float(min_weight or 0),
+            "max_groups": int(max_groups or 50),
+            "layout_mode": layout_mode or "bipartite",
+            "edge_style": edge_style or [],
+            "edge_width_range": edge_width_range,
+            "edge_weight_range": edge_weight_range,
+        },
+        "bipartite_diffusion": {
+            "alpha": markov_alpha,
+            "ranking_mode": markov_ranking_mode,
+            "top_n": markov_top_n,
+        },
+        "projection": {
+            "method": projection_method,
+            "top_n": projection_top_n,
+            "show_labels": projection_show_labels,
+        },
+        "projection_diffusion": {
+            "alpha": projection_diffusion_alpha,
+            "ranking_mode": projection_diffusion_ranking_mode,
+            "top_n": projection_diffusion_top_n,
+        },
+        "consensus": {
+            "top_n": consensus_top_n,
+        },
+        "important_note": "This export does not run an LLM or spend API credits. Scores are prioritization scores, not p-values.",
+    }
+
+    zip_bytes = build_llm_triage_bundle_zip(
+        raw_json=raw_json,
+        graph_data=graph_data,
+        nodes_edges_store=nodes_edges_store,
+        projection_data=projection_data,
+        projection_export_store=projection_export_store,
+        markov_store=markov_store,
+        projection_diffusion_store=projection_diffusion_store,
+        consensus_store=consensus_store,
+        mapped_columns=mapped_columns,
+        settings=settings,
+    )
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"llm_triage_input_bundle_{timestamp}.zip"
+
+    payload = {
+        "content": base64.b64encode(zip_bytes).decode("utf-8"),
+        "filename": filename,
+        "type": "application/zip",
+        "base64": True,
+    }
+    return payload, f"LLM Triage input bundle ready: {filename}"
+
+
+@app.callback(
     Output("dl-main-svg", "data"),
     Input("btn-dl-main-svg", "n_clicks"),
     State("store-graph", "data"),
@@ -3788,4 +4176,3 @@ if __name__ == "__main__":
 
 
 
-      
